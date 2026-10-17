@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Compx Mouse Tool
+GenericName=Mouse Settings
+GenericName[de]=Mauseinstellungen
+Comment=Configure DPI, polling rate and buttons of the Cherry Xtrfy M64 (unofficial)
+Comment[de]=DPI, Polling-Rate und Tasten der Cherry Xtrfy M64 einstellen (inoffiziell)
+Exec=compx-mouse-tool-gui
+Icon=input-mouse
+Categories=Settings;HardwareSettings;Qt;
+Keywords=mouse;dpi;polling;cherry;xtrfy;m64;

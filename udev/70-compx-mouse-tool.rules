@@ -1,0 +1,4 @@
+# compx-mouse-tool: Zugriff des angemeldeten Benutzers auf die Konfigurations-
+# schnittstelle der Cherry Xtrfy M64 (Kabel 046a:0332, Empfänger 046a:0330).
+# Muss vor 73-seat-late.rules laufen, damit uaccess greift.
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046a", ATTRS{idProduct}=="0330|0332", TAG+="uaccess"

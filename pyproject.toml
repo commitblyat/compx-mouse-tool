@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compx-mouse-tool"
+dynamic = ["version"]
+description = "Unofficial Linux configuration tool for the Cherry Xtrfy M64 Wireless (Compx firmware)"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.10"
+dependencies = []
+classifiers = [
+  "Environment :: X11 Applications :: Qt",
+  "Operating System :: POSIX :: Linux",
+  "Topic :: System :: Hardware",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.5"]
+
+[project.scripts]
+compx-mouse-tool = "compx_mouse_tool.cli:main"
+
+[project.gui-scripts]
+compx-mouse-tool-gui = "compx_mouse_tool.gui:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "compx_mouse_tool.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
