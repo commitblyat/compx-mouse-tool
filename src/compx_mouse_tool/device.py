@@ -115,7 +115,7 @@ class Mouse:
         except OSError as exc:
             if exc.errno in (errno.ENODEV, errno.EIO):
                 raise MouseDisconnected("mouse disconnected") from exc
-            raise
+            raise DeviceError(f"USB error: {exc.strerror}") from exc
         deadline = time.monotonic() + TIMEOUT
         while (remaining := deadline - time.monotonic()) > 0:
             if not select.select([self.fd], [], [], remaining)[0]:
@@ -183,31 +183,42 @@ class Mouse:
         path.write_text(json.dumps({"product_id": self.info.product_id, "flash": flash.hex()}, indent=1))
         return path
 
-    def _write(self, address: int, data: bytes) -> None:
-        state_problems = p.validate_layout(self.read_flash(0, p.FLASH_SIZE), self.read_firmware())
+    def _write(self, blocks: list[tuple[int, bytes]]) -> None:
+        """Write whole fields/records, one packet each, then verify all of them.
+
+        A record must never be split across packets: the firmware checks each
+        packet on its own, and a split key-table write made the receiver reset.
+        """
+        flash = self.read_flash(0, p.FLASH_SIZE)
+        state_problems = p.validate_layout(flash, self.read_firmware())
         if state_problems:
             raise DeviceError("writing disabled: " + "; ".join(state_problems))
+        blocks = [(a, d) for a, d in blocks if flash[a : a + len(d)] != d]
+        if not blocks:
+            return
+        if any(len(d) > p.MAX_CHUNK for _, d in blocks):
+            raise p.ProtocolError("a field does not fit into one packet")
         if not self._backed_up:
             self.backup()
             self._backed_up = True
         self._host_control(True)
         try:
-            for offset in range(0, len(data), p.MAX_CHUNK):
-                chunk = data[offset : offset + p.MAX_CHUNK]
-                self._checked(self.exchange(p.Command.WRITE_FLASH, address + offset, chunk), "flash write")
+            for address, data in blocks:
+                self._checked(self.exchange(p.Command.WRITE_FLASH, address, data), "flash write")
         finally:
             try:
                 self._host_control(False)
             except DeviceError:
                 pass
-        if self.read_flash(address, len(data)) != data:
-            raise DeviceError(f"the mouse did not confirm the write at {address}")
+        for address, data in blocks:
+            if self.read_flash(address, len(data)) != data:
+                raise DeviceError(f"the mouse did not confirm the write at {address}")
 
     def write_byte(self, address: int, value: int) -> None:
         allowed = p.WRITABLE_BYTES.get(address)
         if allowed is None or value not in allowed:
             raise p.ProtocolError(f"value {value} is not allowed at {address}")
-        self._write(address, p.byte_field(value))
+        self._write([(address, p.byte_field(value))])
 
     def set_polling(self, hz: int) -> None:
         if hz not in p.POLLING_RATES:
@@ -234,8 +245,8 @@ class Mouse:
     def set_dpi_stages(self, stages: list[int]) -> None:
         if len(stages) != p.DPI_STAGES:
             raise p.ProtocolError(f"expected {p.DPI_STAGES} DPI values")
-        self._write(p.Flash.DPI_TABLE, b"".join(p.encode_dpi(d) for d in stages))
+        self._write([(p.Flash.DPI_TABLE + 4 * i, p.encode_dpi(d)) for i, d in enumerate(stages)])
 
     def set_buttons(self, actions: list[str]) -> None:
         p.validate_buttons(actions)
-        self._write(p.Flash.KEY_TABLE, b"".join(p.encode_key(a) for a in actions))
+        self._write([(p.Flash.KEY_TABLE + 4 * i, p.encode_key(a)) for i, a in enumerate(actions)])

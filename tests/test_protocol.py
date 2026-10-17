@@ -134,6 +134,16 @@ class Writes(unittest.TestCase):
         self.mouse.set_dpi_stages(stages)
         self.assertEqual(p.MouseState(bytes(self.mouse.flash)).dpi_stages, stages)
 
+    def test_records_never_split_and_only_changes_written(self):
+        self.mouse.set_buttons(["left_click", "right_click", "middle_click", "dpi_down", "dpi_up", "dpi_cycle"])
+        writes = [pkt for pkt in self.mouse.sent if pkt[0] == p.Command.WRITE_FLASH]
+        self.assertEqual([(pkt[3], pkt[4]) for pkt in writes], [(108, 4), (112, 4)])
+        self.assertEqual(p.MouseState(bytes(self.mouse.flash)).buttons[3:5], ["dpi_down", "dpi_up"])
+
+    def test_unchanged_write_sends_nothing(self):
+        self.mouse.set_polling(1000)
+        self.assertNotIn(p.Command.WRITE_FLASH, [pkt[0] for pkt in self.mouse.sent])
+
     def test_out_of_range_values_refused(self):
         with self.assertRaises(p.ProtocolError):
             self.mouse.write_byte(p.Flash.DEBOUNCE, 3)

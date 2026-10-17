@@ -70,7 +70,11 @@ class Worker(QObject):
             name, *args = job
             if name == "check_device" and self.jobs.qsize() > 3:
                 continue  # don't pile up hotplug checks behind slow writes
-            getattr(self, name if name.startswith("_") else f"_{name}")(*args)
+            try:
+                getattr(self, name if name.startswith("_") else f"_{name}")(*args)
+            except Exception as exc:  # keep the I/O thread alive whatever happens
+                self.failed.emit(f"{type(exc).__name__}: {exc}")
+                self._close()
         self._close()
 
     def _close(self):
