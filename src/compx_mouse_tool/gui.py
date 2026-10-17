@@ -221,7 +221,8 @@ class MainWindow(QMainWindow):
         form.addRow(tr("Connection") + ":", self.ov_connection)
         form.addRow(tr("Firmware") + ":", self.ov_firmware)
         form.addRow(tr("Battery") + ":", self.ov_battery)
-        form.addRow(tr("DPI") + ":", self.ov_dpi)
+        form.addRow(tr("Stored DPI stage") + ":", self.ov_dpi)
+        form.addRow("", self._hint(tr("Stage changes made with the mouse buttons are not reported to the computer.")))
         form.addRow(tr("Polling rate") + ":", self.ov_polling)
         layout.addLayout(form)
         refresh = QPushButton(QIcon.fromTheme("view-refresh"), tr("Refresh"))
@@ -273,7 +274,7 @@ class MainWindow(QMainWindow):
         grid = QGridLayout()
         self.stage_group = QButtonGroup(self)
         self.stage_radios, self.stage_spins, self.stage_swatches = [], [], []
-        grid.addWidget(QLabel(tr("Active stage")), 0, 0)
+        grid.addWidget(QLabel(tr("Switch to stage")), 0, 0)
         for i in range(p.DPI_STAGES):
             radio = QRadioButton(tr("Stage {n}", n=i + 1))
             self.stage_group.addButton(radio, i)
@@ -501,7 +502,7 @@ class Tray(QSystemTrayIcon):
         if charging:
             text += f" ({tr('charging')})"
         if dpi:
-            text += f"\n{dpi} DPI"
+            text += f"\n{tr('Stored DPI stage')}: {dpi}"
         self.setToolTip(f"Compx Mouse Tool\n{text}")
         threshold = self.settings.value("low_battery", 15, type=int)
         if percent is not None and not charging and percent < threshold:
