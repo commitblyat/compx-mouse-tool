@@ -144,6 +144,21 @@ class Writes(unittest.TestCase):
         self.mouse.set_polling(1000)
         self.assertNotIn(p.Command.WRITE_FLASH, [pkt[0] for pkt in self.mouse.sent])
 
+    def test_active_stage_always_written(self):
+        self.mouse.set_active_stage(self.mouse.flash[p.Flash.DPI_ACTIVE])
+        self.assertIn(p.Command.WRITE_FLASH, [pkt[0] for pkt in self.mouse.sent])
+
+    def test_active_stage_must_be_inside_count(self):
+        self.mouse.set_dpi_stage_count(3)
+        with self.assertRaises(p.ProtocolError):
+            self.mouse.set_active_stage(3)
+
+    def test_lowering_count_moves_active_stage(self):
+        self.mouse.set_active_stage(6)
+        self.mouse.set_dpi_stage_count(4)
+        state = p.MouseState(bytes(self.mouse.flash))
+        self.assertEqual((state.dpi_stage_count, state.dpi_active), (4, 3))
+
     def test_out_of_range_values_refused(self):
         with self.assertRaises(p.ProtocolError):
             self.mouse.write_byte(p.Flash.DEBOUNCE, 3)

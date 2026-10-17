@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import queue
+import shlex
 import sys
 import threading
 from pathlib import Path
@@ -428,11 +429,12 @@ class MainWindow(QMainWindow):
         stages = [spin.value() // p.DPI_STEP * p.DPI_STEP for spin in self.stage_spins]
         if stages != self.state.dpi_stages:
             self.request.emit("set_dpi_stages", (stages,))
-        if self.stage_count.value() != self.state.dpi_stage_count:
-            self.request.emit("set_dpi_stage_count", (self.stage_count.value(),))
-        active = self.stage_group.checkedId()
-        if active != self.state.dpi_active:
-            self.request.emit("set_active_stage", (active,))
+        count, active = self.stage_count.value(), self.stage_group.checkedId()
+        if count > self.state.dpi_stage_count:
+            self.request.emit("set_dpi_stage_count", (count,))
+        self.request.emit("set_active_stage", (active,))  # always: the stored stage may be stale
+        if count < self.state.dpi_stage_count:
+            self.request.emit("set_dpi_stage_count", (count,))
 
     def _apply_buttons(self):
         actions = [box.currentData() for box in self.button_boxes]
@@ -449,12 +451,20 @@ class MainWindow(QMainWindow):
             QApplication.quit()
 
 
+def launch_command() -> str:
+    """How this very process was started, so autostart works without PATH."""
+    script = Path(sys.argv[0]).resolve()
+    if script.name == f"{APP_ID}-gui" and script.exists():
+        return shlex.quote(str(script))
+    return f"{shlex.quote(sys.executable)} -m {__package__}.gui"
+
+
 def set_autostart(enabled: bool):
     if enabled:
         AUTOSTART.parent.mkdir(parents=True, exist_ok=True)
         AUTOSTART.write_text(
             "[Desktop Entry]\nType=Application\nName=Compx Mouse Tool\n"
-            f"Exec={APP_ID}-gui --tray\nIcon=input-mouse\nX-KDE-autostart-phase=2\n"
+            f"Exec={launch_command()} --tray\nIcon=input-mouse\nX-KDE-autostart-phase=2\n"
         )
     elif AUTOSTART.exists():
         AUTOSTART.unlink()

@@ -190,13 +190,17 @@ class Mouse:
         """Write whole fields/records, one packet each, then verify all of them.
 
         A record must never be split across packets: the firmware checks each
-        packet on its own, and a split key-table write made the receiver reset.
+        packet on its own; the reference drivers write one record per packet,
+        and a split key-table write coincided with a receiver reset.
+        Unchanged fields are skipped, except the active DPI stage: the mouse
+        does not store stage changes made with its buttons, so the flash value
+        can be stale and the write must always go out.
         """
         flash = self.read_flash(0, p.FLASH_SIZE)
         state_problems = p.validate_layout(flash, self.read_firmware())
         if state_problems:
             raise DeviceError("writing disabled: " + "; ".join(state_problems))
-        blocks = [(a, d) for a, d in blocks if flash[a : a + len(d)] != d]
+        blocks = [(a, d) for a, d in blocks if a == p.Flash.DPI_ACTIVE or flash[a : a + len(d)] != d]
         if not blocks:
             return
         if any(len(d) > p.MAX_CHUNK for _, d in blocks):
@@ -240,9 +244,17 @@ class Mouse:
         self.write_byte(p.Flash.MOTION_SYNC, int(enabled))
 
     def set_dpi_stage_count(self, count: int) -> None:
+        if not 1 <= count <= p.DPI_STAGES:
+            raise p.ProtocolError(f"stage count must be 1-{p.DPI_STAGES}")
+        active = self.read_flash(p.Flash.DPI_ACTIVE, 2)[0]
+        if active >= count:  # keep the active stage inside the new range
+            self.write_byte(p.Flash.DPI_ACTIVE, count - 1)
         self.write_byte(p.Flash.DPI_STAGE_COUNT, count)
 
     def set_active_stage(self, index: int) -> None:
+        count = self.read_flash(p.Flash.DPI_STAGE_COUNT, 2)[0]
+        if not 0 <= index < count:
+            raise p.ProtocolError(f"stage {index + 1} is not active (only {count} stages)")
         self.write_byte(p.Flash.DPI_ACTIVE, index)
 
     def set_dpi_stages(self, stages: list[int]) -> None:

@@ -22,6 +22,9 @@ the battery level and a command line.
   the mouse
 - English and German UI (follows the system language)
 
+The mouse does not report DPI stage changes made with its own buttons, so the
+app shows the *stored* stage, not necessarily the one in use right now.
+
 ## Supported devices
 
 | Device | USB ID | Status |
