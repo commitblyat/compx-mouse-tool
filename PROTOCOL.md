@@ -48,8 +48,8 @@ Two-byte fields are `value, 0x55 - value`. Four-byte records satisfy
 | Address | Field | Values | Verified by |
 |---|---|---|---|
 | 0 | polling rate | 1 = 1000, 2 = 500, 4 = 250, 8 = 125 Hz | PR switch diff, write |
-| 2 | number of DPI stages | 1–8 | factory value 8 |
-| 4 | active DPI stage | 0-based | factory value 1 = 800 DPI |
+| 2 | number of DPI stages | 1–8 | write, bottom button then cycles 5 stages |
+| 4 | active DPI stage | 0-based; takes effect immediately, but stage changes made with the buttons are not stored here | write, felt immediately |
 | 10 | lift-off distance | 1 = 1 mm, 2 = 2 mm | button combo diff, write |
 | 12 | DPI stages, 8 × 4 bytes | `[raw & 0xff, same, flags, checksum]`, raw = dpi/50 − 1, flags = (raw >> 8) × 0x44 | matches manual: 400 … 26000 |
 | 44 | DPI LED colours, 8 × `[r, g, b, checksum]` | | |
