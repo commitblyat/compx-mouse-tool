@@ -124,7 +124,10 @@ class Mouse:
                 data_in = os.read(self.fd, 64)
             except BlockingIOError:
                 continue
-            if len(data_in) > 1 and data_in[0] == p.REPORT_ID and data_in[1] == command:
+            # Match command *and* address so a late answer to an earlier
+            # request can never be taken for this one.
+            if (len(data_in) > 4 and data_in[0] == p.REPORT_ID and data_in[1] == command
+                    and data_in[3:5] == packet[2:4]):
                 return data_in[1:]
         raise MouseAsleep("the mouse did not answer – move it or click to wake it up")
 
