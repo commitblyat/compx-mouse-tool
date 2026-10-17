@@ -72,6 +72,19 @@ _DE = {
 }
 
 
+_EN = {
+    "left_click": "Left click",
+    "right_click": "Right click",
+    "middle_click": "Middle click",
+    "back": "Back",
+    "forward": "Forward",
+    "dpi_cycle": "Cycle DPI",
+    "dpi_up": "DPI +",
+    "dpi_down": "DPI −",
+    "disabled": "Disabled",
+}
+
+
 def _lang() -> str:
     for var in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
         value = os.environ.get(var)
@@ -80,7 +93,7 @@ def _lang() -> str:
     return (locale.getlocale()[0] or "en")[:2]
 
 
-_TABLE = _DE if _lang() == "de" else {}
+_TABLE = _DE if _lang() == "de" else _EN
 
 
 def tr(text: str, **kwargs) -> str:

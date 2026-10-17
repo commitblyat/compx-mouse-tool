@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import queue
 import sys
+import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSettings, QSignalBlocker, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QSettings, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel,
@@ -27,7 +29,8 @@ AUTOSTART = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "
 
 
 class Worker(QObject):
-    """Owns the hidraw channel. Lives in its own thread; all I/O happens here."""
+    """Owns the hidraw channel. All I/O runs in one Python thread fed by a queue;
+    results come back to the GUI thread through queued Qt signals."""
 
     state = Signal(object)
     battery = Signal(object, object)
@@ -39,24 +42,44 @@ class Worker(QObject):
         super().__init__()
         self.mouse: Mouse | None = None
         self.have_state = False
+        self.jobs: queue.Queue = queue.Queue()
+        self.thread = threading.Thread(target=self._run, name="compx-io", daemon=True)
 
-    @Slot()
     def start(self):
         self.hotplug = QTimer(self)
-        self.hotplug.timeout.connect(self.check_device)
+        self.hotplug.timeout.connect(lambda: self.jobs.put(("check_device",)))
         self.hotplug.start(3000)
         self.battery_timer = QTimer(self)
-        self.battery_timer.timeout.connect(self.read_battery)
+        self.battery_timer.timeout.connect(lambda: self.jobs.put(("read_battery",)))
         self.battery_timer.start(60_000)
-        self.check_device()
+        self.thread.start()
+        self.jobs.put(("check_device",))
+
+    def stop(self):
+        self.jobs.put(None)
+        self.thread.join(3)
+
+    def refresh(self):
+        self.jobs.put(("refresh",))
+
+    def call(self, method: str, args: tuple):
+        self.jobs.put(("_call", method, args))
+
+    def _run(self):
+        while (job := self.jobs.get()) is not None:
+            name, *args = job
+            if name == "check_device" and self.jobs.qsize() > 3:
+                continue  # don't pile up hotplug checks behind slow writes
+            getattr(self, name if name.startswith("_") else f"_{name}")(*args)
+        self._close()
 
     def _close(self):
         if self.mouse:
             self.mouse.close()
             self.mouse = None
+            self.have_state = False
 
-    @Slot()
-    def check_device(self):
+    def _check_device(self):
         devices = find_devices()
         if not devices:
             if self.mouse:
@@ -65,7 +88,7 @@ class Worker(QObject):
             return
         if self.mouse and self.mouse.info == devices[0]:
             if not self.have_state:  # mouse was asleep, try again
-                self.refresh()
+                self._refresh()
             return
         self._close()
         try:
@@ -74,10 +97,9 @@ class Worker(QObject):
             self.connection.emit(False, tr(str(exc)))
             return
         self.connection.emit(True, "")
-        self.refresh()
+        self._refresh()
 
-    @Slot()
-    def refresh(self):
+    def _refresh(self):
         if not self.mouse:
             return
         try:
@@ -89,8 +111,7 @@ class Worker(QObject):
             if isinstance(exc, MouseDisconnected):
                 self._close()
 
-    @Slot()
-    def read_battery(self):
+    def _read_battery(self):
         if not self.mouse:
             return
         try:
@@ -98,8 +119,7 @@ class Worker(QObject):
         except DeviceError:
             pass  # asleep; keep the last known value
 
-    @Slot(str, object)
-    def call(self, method: str, args: tuple):
+    def _call(self, method: str, args: tuple):
         if not self.mouse:
             return
         try:
@@ -107,7 +127,7 @@ class Worker(QObject):
             self.message.emit(tr("Saved."))
         except (DeviceError, p.ProtocolError) as exc:
             self.failed.emit(tr(str(exc)))
-        self.refresh()
+        self._refresh()
 
 
 def battery_icon(percent: int | None, charging: bool | None) -> QIcon:
@@ -510,10 +530,7 @@ def main(argv: list[str] | None = None) -> int:
     window = MainWindow(settings)
     tray = Tray(window, settings) if QSystemTrayIcon.isSystemTrayAvailable() else None
 
-    thread = QThread()
     worker = Worker()
-    worker.moveToThread(thread)
-    thread.started.connect(worker.start)
     window.request.connect(worker.call)
     window.refresh_requested.connect(worker.refresh)
     worker.state.connect(window.show_state)
@@ -527,13 +544,12 @@ def main(argv: list[str] | None = None) -> int:
         worker.battery.connect(tray.show_battery)
         worker.connection.connect(tray.set_connected)
         tray.show()
-    thread.start()
+    worker.start()
 
     if not (args.tray and tray):
         window.show()
     code = app.exec()
-    thread.quit()
-    thread.wait(3000)
+    worker.stop()
     return code
 
 
